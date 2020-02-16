@@ -59,6 +59,18 @@ struct input_frame
   uint16_t ball_y;
 };
 
+struct end_frame
+{
+  uint16_t server_id;
+  uint16_t client_id;
+  struct timespec time;
+  uint16_t paddle_x;
+  uint16_t ball_x;
+  uint16_t ball_y;
+  uint8_t score_own;
+  uint8_t score_enemy;
+};
+
 struct data
 {
   uint16_t server_id;
@@ -344,6 +356,14 @@ int main (int argc, char *argv[ ])
           struct input_frame * i_frame;
           i_frame = (struct input_frame *)databuf;
           if(cli_id == i_frame->client_id && srv_id == i_frame->server_id) {
+            if(i_frame->ball_x == 0xFFFF && i_frame->ball_y == 0xFFFF) {
+              struct end_frame * e_frame;
+              e_frame = (struct end_frame *)databuf;
+              setCursorPosition(18, 35);
+              printf("%d:%d", e_frame->score_own, e_frame->score_enemy);
+              setCursorPosition(41, 1);
+              exit(1);
+            } else
             if((i_frame->time.tv_sec > netstamp.tv_sec) || (i_frame->time.tv_sec == netstamp.tv_sec && i_frame->time.tv_nsec > netstamp.tv_nsec)) { //discard old packets
               netstamp = i_frame->time;
               clearPaddle(xScale(paddle_enemy), 0);
@@ -356,8 +376,6 @@ int main (int argc, char *argv[ ])
             }
           }
         }
-        //recv from srv
-        //redraw //has to keep old position for performance
       }
     
   }

@@ -57,6 +57,18 @@ struct input_frame
   uint16_t ball_y;
 };
 
+struct end_frame
+{
+  uint16_t server_id;
+  uint16_t client_id;
+  struct timespec time;
+  uint16_t paddle_x;
+  uint16_t ball_x;
+  uint16_t ball_y;
+  uint8_t score_own;
+  uint8_t score_enemy;
+};
+
 struct sockaddr_in localSock;
 struct in_addr localInterface;
 struct sockaddr_in groupSock;
@@ -183,32 +195,32 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 				printf("Reading datagram message from client...OK\n");
 				struct init_frame * init_frame;
 				init_frame = (struct init_frame *)databuf;
-				
-				if (cli_id[i] != 0) i++;
-				uint16_t id;
-				do {
-					id = (uint16_t)rand();
-				} while (id == cli_id[i == 0 ? 1 : 0]);
-				cli_id[i] = id;
-				memcpy(cli_name[i], databuf + sizeof(struct init_frame), 16); 
-				printf("Client name is: %s\n", cli_name[i]);
-				struct init_frame return_frame;
-				bzero(&return_frame, sizeof(return_frame));
-				return_frame.client_id = cli_id[i];
-				return_frame.server_id = srv_id;
-				return_frame.waiting = 1;
-				memcpy(&cli_addr[i], &src_addr, sizeof(src_addr));
-				bzero(&databuf, sizeof(databuf));
-				memcpy(databuf, &return_frame, sizeof(return_frame));
-				memcpy(databuf + sizeof(return_frame), cli_name[i], strlen(cli_name[i]));
-				if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, src_addrlen) < 0){
-					perror("Sending datagram message error");
+				if (init_frame->client_id == 0 && init_frame->server_id == 0){
+					if (cli_id[i] != 0) i++;
+					uint16_t id;
+					do {
+						id = (uint16_t)rand();
+					} while (id == cli_id[i == 0 ? 1 : 0]);
+					cli_id[i] = id;
+					memcpy(cli_name[i], databuf + sizeof(struct init_frame), 16); 
+					printf("Client name is: %s\n", cli_name[i]);
+					struct init_frame return_frame;
+					bzero(&return_frame, sizeof(return_frame));
+					return_frame.client_id = cli_id[i];
+					return_frame.server_id = srv_id;
+					return_frame.waiting = 1;
+					memcpy(&cli_addr[i], &src_addr, sizeof(src_addr));
+					bzero(&databuf, sizeof(databuf));
+					memcpy(databuf, &return_frame, sizeof(return_frame));
+					memcpy(databuf + sizeof(return_frame), cli_name[i], strlen(cli_name[i]));
+					if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, src_addrlen) < 0){
+						perror("Sending datagram message error");
+					}
+					else
+						printf("Sending datagram message...OK\n");
+						if (i == 1) looking_for_clients = 0;
 				}
-				else
-					printf("Sending datagram message...OK\n");
-					if (i == 1) looking_for_clients = 0;
 			}
-			
 		}
 		//introduction
 		for (int i = 0; i < 2; i++) {
@@ -311,8 +323,8 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 						} else if (ts.tv_sec < prevtime.tv_sec + 3) {
 							t = (ts.tv_sec - prevtime.tv_sec) * 1000000000UL + ts.tv_nsec - prevtime.tv_nsec;
 						} else exit(1);
-						double dx = t*v_x/4000000;
-						double dy = t*v_y/2000000;
+						double dx = t*v_x/6000000;
+						double dy = t*v_y/4000000;
 						if(ball_x + dx > X_AXIS_MAX) {
 							ball_x = 2*X_AXIS_MAX - ball_x - dx;
 							v_x *= -1;
@@ -321,9 +333,17 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 							v_x *= -1;
 						} else ball_x += dx;
 						if(ball_y + dy > Y_AXIS_MAX) {
+							if (ball_x > paddle[0] + PADDLE_SIZE || ball_x < paddle[0]) {
+								score[1]++;
+								break;
+							}
 							ball_y = 2*Y_AXIS_MAX - ball_y - dy;
 							v_y *= -1;
 						} else if (ball_y + dy < 0) {
+							if (ball_x < Y_AXIS_MAX - paddle[1] || ball_x > Y_AXIS_MAX - paddle[1] + PADDLE_SIZE) { 
+								score[0]++;
+								break;
+							}
 							ball_y = (ball_y + dy) * -1;
 							v_y *= -1;
 						} else ball_y += dy;
@@ -344,8 +364,30 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 				}
 			}
 
-			if (score[1] == 1); //player 2 won
-			if (score[0] == 1); //player 1 won
+			for (int i = 0; i < 2; i++) {
+			struct end_frame e_frame;
+			bzero(&e_frame, sizeof(e_frame));
+			timespec_get(&ts, TIME_UTC);
+			e_frame.client_id = cli_id[i];
+			e_frame.server_id = srv_id;
+			e_frame.time = ts;
+			e_frame.ball_x = 0xFFFF;
+			e_frame.ball_y = 0xFFFF;
+			e_frame.paddle_x = paddle[i == 0 ? 1 : 0];
+			e_frame.score_own = score[i];
+			e_frame.score_enemy = score[i == 0 ? 1 : 0];
+			bzero(&databuf, sizeof(databuf));
+			memcpy(databuf, &e_frame, sizeof(e_frame));
+			socklen_t cli_addrlen = sizeof(cli_addr[i]);
+			if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
+				perror("Sending final message error");
+			}
+			else
+				printf("Sending final message...OK\n");
+		}
+			sleep(5);
+			if (score[1] == 1) break;
+			if (score[0] == 1) break;
 		}
 	}
     
