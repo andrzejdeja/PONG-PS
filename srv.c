@@ -15,23 +15,11 @@
 #include	<unistd.h>
 #include <netinet/sctp.h>
 
- //#include <sys/types.h>
- //#include <sys/socket.h>
- //#include <arpa/inet.h>
- //#include <netinet/in.h>
- //#include <stdio.h>
- //#include <stdlib.h>
+#define X_AXIS_MAX 1024
+#define Y_AXIS_MAX 1024
+#define PADDLE_SIZE 128
 
-
-#define MAXLINE 1024
-
-#define SA struct sockaddr //6
-
-#define LISTENQ 2
 #define SERV_PORT 25564 //6
-#define BUFFSIZE 2048 //6
-//--------------------
-
 
 #define	MAXFD	64
 
@@ -55,7 +43,7 @@ struct countdown_frame
   uint16_t server_id;
   uint16_t client_id;
   struct timespec time;
-  uint16_t paddle_x; //flag ~0
+  uint16_t paddle_x; //flag 0xFFFF
   uint8_t countdown;
 };
 
@@ -69,7 +57,7 @@ struct input_frame
   uint16_t ball_y;
 };
 
-struct sockaddr_in    localSock;
+struct sockaddr_in localSock;
 struct in_addr localInterface;
 struct sockaddr_in groupSock;
  
@@ -115,8 +103,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 	open("/dev/null", O_RDWR);
 
 	openlog(pname, LOG_PID, facility);
-	
-        syslog(LOG_ERR," STDIN =   %i\n", p);
+	syslog(LOG_ERR," STDIN =   %i\n", p);
 	setuid(uid); /* change user */
 	
 	return (0);				/* success */
@@ -266,23 +253,38 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 				counter--;
 				if (counter == 0xFF) break;
 				prevtime = ts;
-				while (1){ //wait 20ms
-					timespec_get(&ts, TIME_UTC);
-					if (ts.tv_sec == prevtime.tv_sec){
-						if (ts.tv_nsec - 20000000UL > prevtime.tv_nsec) {
-							break;
-						} else continue;
-					}
-					if (ts.tv_sec - 1UL == prevtime.tv_sec) {
-						if (ts.tv_nsec + 980000000UL > prevtime.tv_nsec) {
-							break;
-						} else continue;
-					} else break;
-				}
+				struct timespec req, rem;
+				req.tv_sec = 0;
+				req.tv_nsec = 20000000;
+				nanosleep(&req, &rem);
 			}
 			printf("Countdown...OK\n");
+			//first frame of the game
+			for (int i = 0; i < 2; i++) {
+				struct input_frame in_frame;
+				bzero(&in_frame, sizeof(in_frame));
+				in_frame.client_id = cli_id[i];
+				in_frame.server_id = srv_id;
+				in_frame.time = ts;
+				in_frame.paddle_x = (X_AXIS_MAX-PADDLE_SIZE)/2; //half-half of paddle
+				in_frame.ball_x = X_AXIS_MAX/2; //half
+				in_frame.ball_y = Y_AXIS_MAX/2; //half
+				bzero(&databuf, sizeof(databuf));
+				memcpy(databuf, &in_frame, sizeof(in_frame));
+				socklen_t cli_addrlen = sizeof(cli_addr[i]);
+				if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
+					perror("Sending datagram message error");
+				}
+			}
+			int paddle[2] = {(X_AXIS_MAX-PADDLE_SIZE)/2, (X_AXIS_MAX-PADDLE_SIZE)/2};
+			double ball_x = X_AXIS_MAX/2;
+			double ball_y = Y_AXIS_MAX/2;
+			double v_x = 1;
+			double v_y = rand() % 2 - 1;
 			while (1){ //round
-
+				//get input
+				//calculate new positions
+				//return result
 			}
 
 			if (score[1] == 1); //player 2 won

@@ -15,11 +15,14 @@
 #include 	<resolv.h>
 #include 	<unistd.h>
 #include <netinet/sctp.h>
+#include <linux/input.h>
 
-#define MAXLINE 2048
-#define SA      struct sockaddr
 #define SERV_PORT 25564
 #define MAX_SIZE 32
+
+#define X_AXIS_MAX 1024
+#define Y_AXIS_MAX 1024
+#define PADDLE_SIZE 128
 
 struct init_frame
 {
@@ -69,6 +72,42 @@ int sd;
 char databuf[MAX_SIZE] = "";
 int datalen = sizeof(databuf);
 
+void setCursorPosition(int XPos, int YPos) { //from 1 to n
+  printf("\033[%d;%dH", XPos, YPos); 
+}
+
+void clearScreen(){
+  printf("\033[2J");
+}
+
+void drawBall(int x, int y){
+  setCursorPosition(y, x);
+  printf("O\n");
+}
+
+void clearBall(int x, int y){
+  setCursorPosition(y, x);
+  printf(" \n");
+}
+
+int xScale(int x){
+  return (x*72)/X_AXIS_MAX+1;
+}
+
+int yScale(int y){
+  return (y*36)/Y_AXIS_MAX+1;
+}
+
+void drawPaddle(int x, int own){
+  setCursorPosition(own == 1 ? 38 : 2, x+1);
+  printf("=========\n");
+}
+
+void clearPaddle(int x, int own){
+  setCursorPosition(own == 1 ? 38 : 2, x+1);
+  printf("         \n");
+}
+
 /* Send Multicast Datagram code example. */
 int main (int argc, char *argv[ ])
 {
@@ -80,6 +119,17 @@ int main (int argc, char *argv[ ])
     perror("Max <name> length = 16");
     exit(1);
   }
+  /* Setup mouse capture */
+  // int fid = open("/dev/input/mice", O_RDONLY);
+	// if (fid == -1){
+	// 	perror("Could not open mice device!");
+	// 	exit(1);
+	// }
+	// fprintf(stdout, "Opened mice device!\n");
+
+  // int flags = fcntl(fid, F_GETFL, 0);
+  // fcntl(fid, F_SETFL, flags | O_NONBLOCK);
+
   /* Create a datagram socket on which to send. */
   sd = socket(AF_INET, SOCK_DGRAM, 0);
   if(sd < 0)
@@ -178,6 +228,13 @@ int main (int argc, char *argv[ ])
   struct timespec prevtime, ts, netstamp;
   sizeof(struct countdown_frame);
   while (1) {//main loop
+        //draw frame w/ dashboard
+      setCursorPosition(1, 1);
+      printf("+------------------------------------------------------------------------+\n"); //72+2
+      for (int i = 2; i < 40; i++) {
+        printf("|                                                                        |\n");
+      }
+      printf("+------------------------------------------------------------------------+\n");
     //first frame
       if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
 				perror("Reading datagram message error\n");
@@ -188,11 +245,20 @@ int main (int argc, char *argv[ ])
 				cd_frame = (struct countdown_frame *)databuf;
 				if(cli_id == cd_frame->client_id && srv_id == cd_frame->server_id) {
           if(cd_frame->paddle_x == 0xFFFF){
-            netstamp = cd_frame->time;         
+            netstamp = cd_frame->time;
+            setCursorPosition(7, 25);
             printf("Game starts in: %f sec\n", cd_frame->countdown/50.0);
           } else break;
         }
 			}
+      int fid = open("/dev/input/mice", O_RDONLY);
+      if (fid == -1){
+        perror("Could not open mice device!");
+        exit(1);
+      }
+
+      int flags = fcntl(fid, F_GETFL, 0);
+      fcntl(fid, F_SETFL, flags | O_NONBLOCK);
       while(1){ //countdown loop
         if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
           perror("Reading datagram message error\n");
@@ -204,7 +270,8 @@ int main (int argc, char *argv[ ])
           if(cli_id == cd_frame->client_id && srv_id == cd_frame->server_id) {
             if(cd_frame->paddle_x == 0xFFFF){
               if((cd_frame->time.tv_sec > netstamp.tv_sec) || (cd_frame->time.tv_sec == netstamp.tv_sec && cd_frame->time.tv_nsec > netstamp.tv_nsec)) { //discard old packets
-                netstamp = cd_frame->time;         
+                netstamp = cd_frame->time;
+                setCursorPosition(7, 25);
                 printf("Game starts in: %f sec\n", cd_frame->countdown/50.0);
                 if (cd_frame->countdown == 0) break;
               }
@@ -212,15 +279,54 @@ int main (int argc, char *argv[ ])
           }
         }
       }
-      //draw frame w/ dashboard
+      setCursorPosition(7, 25);
+      printf("                            \n");
+      timespec_get(&ts, TIME_UTC);
+      int ball_x = X_AXIS_MAX/2;
+      int ball_y = Y_AXIS_MAX/2;
+      int paddle_own = (X_AXIS_MAX-PADDLE_SIZE)/2;
+      int paddle_enemy = (X_AXIS_MAX-PADDLE_SIZE)/2;
+      drawBall(xScale(ball_x), yScale(ball_y));
+      drawPaddle(xScale(paddle_own), 1);
       while(1){ //round loop
-        //take input
+        int delta_x = 0;
+        signed char x;
+        prevtime = ts;
+        struct timespec prevtime2;
+        bzero(&prevtime2, sizeof(prevtime2));
+        while (1){ //capture mouse for 10ms
+          timespec_get(&ts, TIME_UTC);
+          if (ts.tv_sec == prevtime.tv_sec){
+            if (ts.tv_nsec > prevtime.tv_nsec + 10000000UL) break;
+          }
+          if (ts.tv_sec > prevtime.tv_sec) {
+            if (ts.tv_nsec > prevtime.tv_nsec + 10000000UL - 1000000000UL) break;
+          }
+          char event[4];
+          int bytes = read(fid, &event, 4);
+          if(bytes > 0) {
+            x = event[1];
+            delta_x += x;
+          }
+          prevtime2 = ts;
+          struct timespec req, rem;
+          req.tv_sec = 0;
+          req.tv_nsec = 2000000;
+          nanosleep(&req, &rem);
+        }
+        if (delta_x != 0) {
+          clearPaddle(xScale(paddle_own), 1);
+          paddle_own += delta_x;
+          if (paddle_own < 0) paddle_own = 0;
+          if (paddle_own > X_AXIS_MAX-PADDLE_SIZE) paddle_own = X_AXIS_MAX-PADDLE_SIZE;
+          drawPaddle(xScale(paddle_own), 1);
+        }
         //send to srv
         //recv from srv
         //redraw //has to keep old position for performance
       }
-  
+    
   }
   return 0;
-  }
+}
 
