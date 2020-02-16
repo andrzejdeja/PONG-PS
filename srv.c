@@ -260,31 +260,64 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 			}
 			printf("Countdown...OK\n");
 			//first frame of the game
-			for (int i = 0; i < 2; i++) {
-				struct input_frame in_frame;
-				bzero(&in_frame, sizeof(in_frame));
-				in_frame.client_id = cli_id[i];
-				in_frame.server_id = srv_id;
-				in_frame.time = ts;
-				in_frame.paddle_x = (X_AXIS_MAX-PADDLE_SIZE)/2; //half-half of paddle
-				in_frame.ball_x = X_AXIS_MAX/2; //half
-				in_frame.ball_y = Y_AXIS_MAX/2; //half
-				bzero(&databuf, sizeof(databuf));
-				memcpy(databuf, &in_frame, sizeof(in_frame));
-				socklen_t cli_addrlen = sizeof(cli_addr[i]);
-				if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
-					perror("Sending datagram message error");
-				}
-			}
+			// for (int i = 0; i < 2; i++) {
+			// 	struct input_frame in_frame;
+			// 	bzero(&in_frame, sizeof(in_frame));
+			// 	in_frame.client_id = cli_id[i];
+			// 	in_frame.server_id = srv_id;
+			// 	in_frame.time = ts;
+			// 	in_frame.paddle_x = (X_AXIS_MAX-PADDLE_SIZE)/2; //half-half of paddle
+			// 	in_frame.ball_x = X_AXIS_MAX/2; //half
+			// 	in_frame.ball_y = Y_AXIS_MAX/2; //half
+			// 	bzero(&databuf, sizeof(databuf));
+			// 	memcpy(databuf, &in_frame, sizeof(in_frame));
+			// 	socklen_t cli_addrlen = sizeof(cli_addr[i]);
+			// 	if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
+			// 		perror("Sending datagram message error");
+			// 	}
+			// }
 			int paddle[2] = {(X_AXIS_MAX-PADDLE_SIZE)/2, (X_AXIS_MAX-PADDLE_SIZE)/2};
 			double ball_x = X_AXIS_MAX/2;
 			double ball_y = Y_AXIS_MAX/2;
 			double v_x = 1;
 			double v_y = rand() % 2 - 1;
 			while (1){ //round
-				//get input
-				//calculate new positions
-				//return result
+				struct sockaddr src_addr;
+				socklen_t src_addrlen = sizeof(src_addr);
+				bzero(&src_addr, sizeof(src_addr));
+				if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, &src_addrlen) < 0)
+				{
+					perror("Reading datagram message error\n");
+					close(sd);
+					exit(1);
+				}
+				else
+				{
+					printf("Reading datagram message from client...OK\n");
+					struct output_frame * o_frame;
+					o_frame = (struct output_frame *)databuf;
+					if(o_frame->server_id == srv_id){
+						int i = 0;
+						if(o_frame->client_id == cli_id[0]) i = 0;
+						else if(o_frame->client_id == cli_id[1]) i = 1; else continue;
+						paddle[i] = (i == 0 ? o_frame->paddle_x : X_AXIS_MAX - o_frame->paddle_x);
+						timespec_get(&ts, TIME_UTC);
+						//compute ball pos TODO
+						struct input_frame return_frame;
+						bzero(&return_frame, sizeof(return_frame));
+						return_frame.client_id = cli_id[i];
+						return_frame.server_id = srv_id;
+						return_frame.paddle_x = (i == 0 ? paddle[i] : X_AXIS_MAX - paddle[i]);
+						return_frame.ball_x = (i == 0 ? ball_x : X_AXIS_MAX - ball_x);
+						return_frame.ball_y = (i == 0 ? ball_y : Y_AXIS_MAX - ball_y);
+						return_frame.time = ts;
+						bzero(&databuf, sizeof(databuf));
+						memcpy(databuf, &return_frame, sizeof(return_frame));
+						if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, src_addrlen) < 0){
+							perror("Sending datagram message error");
+						}
+					}
+				}
 			}
 
 			if (score[1] == 1); //player 2 won

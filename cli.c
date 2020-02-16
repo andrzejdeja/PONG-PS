@@ -257,8 +257,8 @@ int main (int argc, char *argv[ ])
         exit(1);
       }
 
-      int flags = fcntl(fid, F_GETFL, 0);
-      fcntl(fid, F_SETFL, flags | O_NONBLOCK);
+      //int flags = fcntl(fid, F_GETFL, 0);
+      //fcntl(fid, F_SETFL, flags | O_NONBLOCK);
       while(1){ //countdown loop
         if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
           perror("Reading datagram message error\n");
@@ -291,37 +291,64 @@ int main (int argc, char *argv[ ])
       while(1){ //round loop
         int delta_x = 0;
         signed char x;
-        prevtime = ts;
-        struct timespec prevtime2;
-        bzero(&prevtime2, sizeof(prevtime2));
-        while (1){ //capture mouse for 10ms
-          timespec_get(&ts, TIME_UTC);
-          if (ts.tv_sec == prevtime.tv_sec){
-            if (ts.tv_nsec > prevtime.tv_nsec + 10000000UL) break;
-          }
-          if (ts.tv_sec > prevtime.tv_sec) {
-            if (ts.tv_nsec > prevtime.tv_nsec + 10000000UL - 1000000000UL) break;
-          }
+        // prevtime = ts;
+        // struct timespec prevtime2;
+        // bzero(&prevtime2, sizeof(prevtime2));
+        // while (1){ //capture mouse for 10ms
+        //   timespec_get(&ts, TIME_UTC);
+        //   if (ts.tv_sec == prevtime.tv_sec){
+        //     if (ts.tv_nsec > prevtime.tv_nsec + 10000000UL) break;
+        //   }
+        //   if (ts.tv_sec > prevtime.tv_sec) {
+        //     if (ts.tv_nsec > prevtime.tv_nsec + 10000000UL - 1000000000UL) break;
+        //   }
           char event[4];
           int bytes = read(fid, &event, 4);
           if(bytes > 0) {
             x = event[1];
             delta_x += x;
           }
-          prevtime2 = ts;
+          // prevtime2 = ts;
           struct timespec req, rem;
           req.tv_sec = 0;
-          req.tv_nsec = 2000000;
+          req.tv_nsec = 10000000;
           nanosleep(&req, &rem);
-        }
-        if (delta_x != 0) {
+        // }
+        if (delta_x != 0) { //did pos change?
           clearPaddle(xScale(paddle_own), 1);
           paddle_own += delta_x;
           if (paddle_own < 0) paddle_own = 0;
           if (paddle_own > X_AXIS_MAX-PADDLE_SIZE) paddle_own = X_AXIS_MAX-PADDLE_SIZE;
           drawPaddle(xScale(paddle_own), 1);
         }
-        //send to srv
+        struct output_frame o_frame;
+        timespec_get(&ts, TIME_UTC);
+        o_frame.client_id = cli_id;
+        o_frame.server_id = srv_id;
+        o_frame.time = ts;
+        o_frame.paddle_x = paddle_own;
+        memcpy(databuf, &o_frame, sizeof(o_frame));
+        if(sendto(sd, databuf, sizeof(databuf), 0, (struct sockaddr*)&srv_addr, srv_addrlen) < 0){ //sharing paddle position
+          perror("Sending datagram message error");
+        }
+        if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
+          perror("Reading datagram message error\n");
+        } else {
+          struct input_frame * i_frame;
+          i_frame = (struct input_frame *)databuf;
+          if(cli_id == i_frame->client_id && srv_id == i_frame->server_id) {
+            if((i_frame->time.tv_sec > netstamp.tv_sec) || (i_frame->time.tv_sec == netstamp.tv_sec && i_frame->time.tv_nsec > netstamp.tv_nsec)) { //discard old packets
+              netstamp = i_frame->time;
+              clearPaddle(xScale(paddle_enemy), 0);
+              clearBall(xScale(ball_x), yScale(ball_y));
+              ball_x = i_frame->ball_x;
+              ball_y = i_frame->ball_y;
+              paddle_enemy = i_frame->paddle_x;
+              drawPaddle(xScale(i_frame->paddle_x), 0);
+              drawBall(xScale(ball_x), yScale(ball_y));
+            }
+          }
+        }
         //recv from srv
         //redraw //has to keep old position for performance
       }
