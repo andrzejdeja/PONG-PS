@@ -11,6 +11,7 @@
 #include        <stdio.h>
 #include        <stdlib.h>
 #include        <string.h>
+#include        <poll.h>
 #include 	<netdb.h>
 #include 	<resolv.h>
 #include 	<unistd.h>
@@ -81,12 +82,12 @@ void clearScreen(){
 }
 
 void drawBall(int x, int y){
-  setCursorPosition(y, x);
+  setCursorPosition(y + 2, x + 1);
   printf("O\n");
 }
 
 void clearBall(int x, int y){
-  setCursorPosition(y, x);
+  setCursorPosition(y + 2, x + 1);
   printf(" \n");
 }
 
@@ -99,16 +100,15 @@ int yScale(int y){
 }
 
 void drawPaddle(int x, int own){
-  setCursorPosition(own == 1 ? 38 : 2, x+1);
+  setCursorPosition(own == 1 ? 39 : 2, x+1);
   printf("=========\n");
 }
 
 void clearPaddle(int x, int own){
-  setCursorPosition(own == 1 ? 38 : 2, x+1);
+  setCursorPosition(own == 1 ? 39 : 2, x+1);
   printf("         \n");
 }
 
-/* Send Multicast Datagram code example. */
 int main (int argc, char *argv[ ])
 {
   if (argc < 3) {
@@ -303,10 +303,17 @@ int main (int argc, char *argv[ ])
         //     if (ts.tv_nsec > prevtime.tv_nsec + 10000000UL - 1000000000UL) break;
         //   }
           char event[4];
-          int bytes = read(fid, &event, 4);
-          if(bytes > 0) {
-            x = event[1];
-            delta_x += x;
+          struct pollfd fds;
+          int nfds = 1;
+          fds.fd = fid;
+          fds.events = POLLIN;
+          int timeout = 2;
+          if(poll(&fds, nfds, timeout) > 0){
+            int bytes = read(fid, &event, 4);
+            if(bytes > 0) {
+              x = event[1];
+              delta_x = x;
+            }
           }
           // prevtime2 = ts;
           struct timespec req, rem;

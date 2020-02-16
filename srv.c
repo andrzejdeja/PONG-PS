@@ -251,8 +251,8 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 					}
 				}
 				counter--;
-				if (counter == 0xFF) break;
 				prevtime = ts;
+				if (counter == 0xFF) break;
 				struct timespec req, rem;
 				req.tv_sec = 0;
 				req.tv_nsec = 20000000;
@@ -279,8 +279,10 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 			int paddle[2] = {(X_AXIS_MAX-PADDLE_SIZE)/2, (X_AXIS_MAX-PADDLE_SIZE)/2};
 			double ball_x = X_AXIS_MAX/2;
 			double ball_y = Y_AXIS_MAX/2;
-			double v_x = 1;
-			double v_y = rand() % 2 - 1;
+			double v_y = 1;
+			double v_x = rand() % 1 - 0.5;
+			v_x =+ (v_x > 0 ? 0.5 : -1*0.5);
+			timespec_get(&ts, TIME_UTC);
 			while (1){ //round
 				struct sockaddr src_addr;
 				socklen_t src_addrlen = sizeof(src_addr);
@@ -293,7 +295,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 				}
 				else
 				{
-					printf("Reading datagram message from client...OK\n");
+					//printf("Reading datagram message from client...OK\n");
 					struct output_frame * o_frame;
 					o_frame = (struct output_frame *)databuf;
 					if(o_frame->server_id == srv_id){
@@ -301,21 +303,43 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 						if(o_frame->client_id == cli_id[0]) i = 0;
 						else if(o_frame->client_id == cli_id[1]) i = 1; else continue;
 						paddle[i] = (i == 0 ? o_frame->paddle_x : X_AXIS_MAX - o_frame->paddle_x);
+						prevtime = ts;
 						timespec_get(&ts, TIME_UTC);
-						//compute ball pos TODO
+						uint32_t t = 0; //delta_t
+						if(ts.tv_sec == prevtime.tv_sec) { 
+							t = ts.tv_nsec - prevtime.tv_nsec;
+						} else if (ts.tv_sec < prevtime.tv_sec + 3) {
+							t = (ts.tv_sec - prevtime.tv_sec) * 1000000000UL + ts.tv_nsec - prevtime.tv_nsec;
+						} else exit(1);
+						double dx = t*v_x/4000000;
+						double dy = t*v_y/2000000;
+						if(ball_x + dx > X_AXIS_MAX) {
+							ball_x = 2*X_AXIS_MAX - ball_x - dx;
+							v_x *= -1;
+						} else if (ball_x + dx < 0) {
+							ball_x = (ball_x + dx) * -1;
+							v_x *= -1;
+						} else ball_x += dx;
+						if(ball_y + dy > Y_AXIS_MAX) {
+							ball_y = 2*Y_AXIS_MAX - ball_y - dy;
+							v_y *= -1;
+						} else if (ball_y + dy < 0) {
+							ball_y = (ball_y + dy) * -1;
+							v_y *= -1;
+						} else ball_y += dy;
 						struct input_frame return_frame;
 						bzero(&return_frame, sizeof(return_frame));
 						return_frame.client_id = cli_id[i];
 						return_frame.server_id = srv_id;
 						return_frame.paddle_x = (i == 0 ? paddle[i] : X_AXIS_MAX - paddle[i]);
-						return_frame.ball_x = (i == 0 ? ball_x : X_AXIS_MAX - ball_x);
-						return_frame.ball_y = (i == 0 ? ball_y : Y_AXIS_MAX - ball_y);
+						return_frame.ball_x = (uint16_t)ball_x;
+						return_frame.ball_y = (i == 0 ? (uint16_t)ball_y : (uint16_t)(Y_AXIS_MAX - ball_y));
 						return_frame.time = ts;
 						bzero(&databuf, sizeof(databuf));
 						memcpy(databuf, &return_frame, sizeof(return_frame));
 						if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, src_addrlen) < 0){
 							perror("Sending datagram message error");
-						}
+						} else printf("%f\n", ball_y);
 					}
 				}
 			}
