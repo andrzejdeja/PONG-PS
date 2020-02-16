@@ -50,6 +50,15 @@ struct output_frame
   uint16_t paddle_x;
 };
 
+struct countdown_frame
+{
+  uint16_t server_id;
+  uint16_t client_id;
+  struct timespec time;
+  uint16_t paddle_x; //flag ~0
+  uint8_t countdown;
+};
+
 struct input_frame
 {
   uint16_t server_id;
@@ -65,7 +74,7 @@ struct in_addr localInterface;
 struct sockaddr_in groupSock;
  
 int sd;
-char databuf[24] = "";
+char databuf[32] = "";
 int datalen = sizeof(databuf);
 
 int daemon_init(const char *pname, int facility, uid_t uid, int socket)
@@ -232,6 +241,53 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 				printf("Sending introduction message...OK\n");
 		}
 		//game
+		short score[2] = {0, 0};
+		while(1){ //match
+			struct timespec prevtime;
+			struct timespec ts;
+			uint8_t counter = 0xFF;
+			while (1){ //countdown
+				timespec_get(&ts, TIME_UTC);
+				for (int i = 0; i < 2; i++) {
+					struct countdown_frame cd_frame;
+					bzero(&cd_frame, sizeof(cd_frame));
+					cd_frame.client_id = cli_id[i];
+					cd_frame.server_id = srv_id;
+					cd_frame.time = ts;
+					cd_frame.paddle_x = 0xFFFF; //flag to countdown;
+					cd_frame.countdown = counter;
+					bzero(&databuf, sizeof(databuf));
+					memcpy(databuf, &cd_frame, sizeof(cd_frame));
+					socklen_t cli_addrlen = sizeof(cli_addr[i]);
+					if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
+						perror("Sending countdown message error");
+					}
+				}
+				counter--;
+				if (counter == 0xFF) break;
+				prevtime = ts;
+				while (1){ //wait 20ms
+					timespec_get(&ts, TIME_UTC);
+					if (ts.tv_sec == prevtime.tv_sec){
+						if (ts.tv_nsec - 20000000UL > prevtime.tv_nsec) {
+							break;
+						} else continue;
+					}
+					if (ts.tv_sec - 1UL == prevtime.tv_sec) {
+						if (ts.tv_nsec + 980000000UL > prevtime.tv_nsec) {
+							break;
+						} else continue;
+					} else break;
+				}
+			}
+			printf("Countdown...OK\n");
+			while (1){ //round
+
+			}
+
+			if (score[1] == 1); //player 2 won
+			if (score[0] == 1); //player 1 won
+		}
 	}
     
     return 0;

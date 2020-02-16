@@ -19,7 +19,7 @@
 #define MAXLINE 2048
 #define SA      struct sockaddr
 #define SERV_PORT 25564
-#define MAX_SIZE 24
+#define MAX_SIZE 32
 
 struct init_frame
 {
@@ -34,6 +34,15 @@ struct output_frame
   uint16_t client_id;
   struct timespec time;
   uint16_t paddle_x;
+};
+
+struct countdown_frame
+{
+  uint16_t server_id;
+  uint16_t client_id;
+  struct timespec time;
+  uint16_t paddle_x; //flag ~0
+  uint8_t countdown;
 };
 
 struct input_frame
@@ -151,26 +160,67 @@ int main (int argc, char *argv[ ])
       srv_id = init_frame->server_id;
     }
   while(1){
-    if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0)
-			{
+    if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
 				perror("Reading datagram message error\n");
 				close(sd);
 				exit(1);
-			}
-			else
-			{
+			} else {
 				printf("Reading datagram message from server...OK\n");
 				struct init_frame * init_frame;
 				init_frame = (struct init_frame *)databuf;
 				if(cli_id == init_frame->client_id && srv_id == init_frame->server_id && init_frame->waiting == 0) {
-            memcpy(enemy_name, databuf + sizeof(struct init_frame), 16); 
-            break;
-          }
+          memcpy(enemy_name, databuf + sizeof(struct init_frame), 16); 
+          printf("Playing against: %s\n", enemy_name);
+          break;
+        }
 			}
-      
   }
+  struct timespec prevtime, ts, netstamp;
+  sizeof(struct countdown_frame);
+  while (1) {//main loop
+    //first frame
+      if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
+				perror("Reading datagram message error\n");
+				close(sd);
+				exit(1);
+			} else {
+				struct countdown_frame * cd_frame;
+				cd_frame = (struct countdown_frame *)databuf;
+				if(cli_id == cd_frame->client_id && srv_id == cd_frame->server_id) {
+          if(cd_frame->paddle_x == 0xFFFF){
+            netstamp = cd_frame->time;         
+            printf("Game starts in: %f sec\n", cd_frame->countdown/50.0);
+          } else break;
+        }
+			}
+      while(1){ //countdown loop
+        if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
+          perror("Reading datagram message error\n");
+          close(sd);
+          exit(1);
+        } else {
+          struct countdown_frame * cd_frame;
+          cd_frame = (struct countdown_frame *)databuf;
+          if(cli_id == cd_frame->client_id && srv_id == cd_frame->server_id) {
+            if(cd_frame->paddle_x == 0xFFFF){
+              if((cd_frame->time.tv_sec > netstamp.tv_sec) || (cd_frame->time.tv_sec == netstamp.tv_sec && cd_frame->time.tv_nsec > netstamp.tv_nsec)) { //discard old packets
+                netstamp = cd_frame->time;         
+                printf("Game starts in: %f sec\n", cd_frame->countdown/50.0);
+                if (cd_frame->countdown == 0) break;
+              }
+            } else break;
+          }
+        }
+      }
+      //draw frame w/ dashboard
+      while(1){ //round loop
+        //take input
+        //send to srv
+        //recv from srv
+        //redraw //has to keep old position for performance
+      }
   
-  
+  }
   return 0;
   }
 
