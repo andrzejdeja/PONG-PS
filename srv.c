@@ -125,6 +125,10 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
     /* Send Multicast Datagram code example. */
     int main (int argc, char *argv[ ])
     {
+	if (argc < 2) {
+    	perror("Usage: srv <IP>");
+    	exit(1);
+  	}
 	srand(time(NULL));
     /* Create a datagram socket on which to send. */
     sd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -154,7 +158,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 
 	struct ip_mreq group;
 	group.imr_multiaddr.s_addr = inet_addr("225.1.1.1");
-  	group.imr_interface.s_addr = inet_addr("127.0.0.1");
+  	group.imr_interface.s_addr = inet_addr(argv[1]);
   	if (setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0) { //to recv multicast
     	perror("adding multicast group");
     	close(sd);
@@ -162,7 +166,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
   	} else
       printf("Subbing to multicast group...OK\n");
        
-    localInterface.s_addr = inet_addr("127.0.0.1");
+    localInterface.s_addr = inet_addr(argv[1]);
     if(setsockopt(sd, IPPROTO_IP, IP_MULTICAST_IF, (char *)&localInterface, sizeof(localInterface)) < 0)
     {
       	perror("Setting local interface error");
@@ -170,6 +174,8 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
     }
     else
 		printf("Setting the local interface...OK\n");
+		printf("Demon init\n");
+	daemon_init(argv[0], LOG_USER, 1000, sd);
 
 	while(1){ //MAIN LOOP
 		short looking_for_clients = 1;
@@ -186,13 +192,13 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 
 			if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, &src_addrlen) < 0)
 			{
-				perror("Reading datagram message error\n");
+				syslog(LOG_ERR, "Reading datagram message error\n");
 				close(sd);
 				exit(1);
 			}
 			else
 			{
-				printf("Reading datagram message from client...OK\n");
+				syslog (LOG_NOTICE, "Reading datagram message from client...OK\n");
 				struct init_frame * init_frame;
 				init_frame = (struct init_frame *)databuf;
 				if (init_frame->client_id == 0 && init_frame->server_id == 0){
@@ -203,7 +209,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 					} while (id == cli_id[i == 0 ? 1 : 0]);
 					cli_id[i] = id;
 					memcpy(cli_name[i], databuf + sizeof(struct init_frame), 16); 
-					printf("Client name is: %s\n", cli_name[i]);
+					syslog (LOG_NOTICE, "Client name is: %s\n", cli_name[i]);
 					struct init_frame return_frame;
 					bzero(&return_frame, sizeof(return_frame));
 					return_frame.client_id = cli_id[i];
@@ -214,10 +220,10 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 					memcpy(databuf, &return_frame, sizeof(return_frame));
 					memcpy(databuf + sizeof(return_frame), cli_name[i], strlen(cli_name[i]));
 					if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, src_addrlen) < 0){
-						perror("Sending datagram message error");
+						syslog(LOG_ERR, "Sending datagram message error\n");
 					}
 					else
-						printf("Sending datagram message...OK\n");
+						syslog (LOG_NOTICE, "Sending datagram message...OK\n");
 						if (i == 1) looking_for_clients = 0;
 				}
 			}
@@ -234,10 +240,10 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 			memcpy(databuf + sizeof(intr_frame), cli_name[i == 0 ? 1 : 0], strlen(cli_name[i == 0 ? 1 : 0]));
 			socklen_t cli_addrlen = sizeof(cli_addr[i]);
 			if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
-				perror("Sending introduction message error");
+				syslog(LOG_ERR, "Sending introduction message error\n");
 			}
 			else
-				printf("Sending introduction message...OK\n");
+				syslog (LOG_NOTICE, "Sending introduction message...OK\n");
 		}
 		//game
 		short score[2] = {0, 0};
@@ -259,7 +265,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 					memcpy(databuf, &cd_frame, sizeof(cd_frame));
 					socklen_t cli_addrlen = sizeof(cli_addr[i]);
 					if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
-						perror("Sending countdown message error");
+						syslog(LOG_ERR, "Sending countdown message error\n");
 					}
 				}
 				counter--;
@@ -270,7 +276,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 				req.tv_nsec = 20000000;
 				nanosleep(&req, &rem);
 			}
-			printf("Countdown...OK\n");
+			syslog (LOG_NOTICE, "Countdown...OK\n");
 			//first frame of the game
 			// for (int i = 0; i < 2; i++) {
 			// 	struct input_frame in_frame;
@@ -301,7 +307,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 				bzero(&src_addr, sizeof(src_addr));
 				if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, &src_addrlen) < 0)
 				{
-					perror("Reading datagram message error\n");
+					syslog(LOG_ERR, "Reading datagram message error\n");
 					close(sd);
 					exit(1);
 				}
@@ -358,8 +364,8 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 						bzero(&databuf, sizeof(databuf));
 						memcpy(databuf, &return_frame, sizeof(return_frame));
 						if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, src_addrlen) < 0){
-							perror("Sending datagram message error");
-						} else printf("%f\n", ball_y);
+							syslog(LOG_ERR, "Sending datagram message error\n");
+						}
 					}
 				}
 			}
@@ -380,12 +386,13 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 			memcpy(databuf, &e_frame, sizeof(e_frame));
 			socklen_t cli_addrlen = sizeof(cli_addr[i]);
 			if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
-				perror("Sending final message error");
+				syslog(LOG_ERR, "Sending final message error\n");
 			}
 			else
-				printf("Sending final message...OK\n");
+				syslog (LOG_NOTICE, "Sending final message...OK\n");
 		}
 			sleep(5);
+			syslog (LOG_NOTICE, "New session\n");
 			if (score[1] == 1) break;
 			if (score[0] == 1) break;
 		}
