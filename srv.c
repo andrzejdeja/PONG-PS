@@ -357,7 +357,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 						bzero(&return_frame, sizeof(return_frame));
 						return_frame.client_id = cli_id[i];
 						return_frame.server_id = srv_id;
-						return_frame.paddle_x = (i == 0 ? paddle[i] : X_AXIS_MAX - paddle[i]);
+						return_frame.paddle_x = (i == 0 ? X_AXIS_MAX - paddle[1] : paddle[0]);
 						return_frame.ball_x = (uint16_t)ball_x;
 						return_frame.ball_y = (i == 0 ? (uint16_t)ball_y : (uint16_t)(Y_AXIS_MAX - ball_y));
 						return_frame.time = ts;
