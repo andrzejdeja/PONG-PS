@@ -13,7 +13,6 @@
 #include        <string.h>
 #include	<syslog.h>
 #include	<unistd.h>
-#include <netinet/sctp.h>
 
 #define X_AXIS_MAX 1024
 #define Y_AXIS_MAX 1024
@@ -122,7 +121,6 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 }
 //----------------------
 
-    /* Send Multicast Datagram code example. */
     int main (int argc, char *argv[ ])
     {
 	if (argc < 2) {
@@ -130,7 +128,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
     	exit(1);
   	}
 	srand(time(NULL));
-    /* Create a datagram socket on which to send. */
+
     sd = socket(AF_INET, SOCK_DGRAM, 0);
     if(sd < 0)
     {
@@ -190,7 +188,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 			socklen_t src_addrlen = sizeof(src_addr);
 			bzero(&src_addr, sizeof(src_addr));
 
-			if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, &src_addrlen) < 0)
+			if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, &src_addrlen) < 32)
 			{
 				syslog(LOG_ERR, "Reading datagram message error\n");
 				close(sd);
@@ -219,7 +217,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 					bzero(&databuf, sizeof(databuf));
 					memcpy(databuf, &return_frame, sizeof(return_frame));
 					memcpy(databuf + sizeof(return_frame), cli_name[i], strlen(cli_name[i]));
-					if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, src_addrlen) < 0){
+					if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, src_addrlen) < 32){
 						syslog(LOG_ERR, "Sending datagram message error\n");
 					}
 					else
@@ -239,7 +237,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 			memcpy(databuf, &intr_frame, sizeof(intr_frame));
 			memcpy(databuf + sizeof(intr_frame), cli_name[i == 0 ? 1 : 0], strlen(cli_name[i == 0 ? 1 : 0]));
 			socklen_t cli_addrlen = sizeof(cli_addr[i]);
-			if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
+			if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 32){
 				syslog(LOG_ERR, "Sending introduction message error\n");
 			}
 			else
@@ -264,7 +262,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 					bzero(&databuf, sizeof(databuf));
 					memcpy(databuf, &cd_frame, sizeof(cd_frame));
 					socklen_t cli_addrlen = sizeof(cli_addr[i]);
-					if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
+					if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 32){
 						syslog(LOG_ERR, "Sending countdown message error\n");
 					}
 				}
@@ -277,23 +275,6 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 				nanosleep(&req, &rem);
 			}
 			syslog (LOG_NOTICE, "Countdown...OK\n");
-			//first frame of the game
-			// for (int i = 0; i < 2; i++) {
-			// 	struct input_frame in_frame;
-			// 	bzero(&in_frame, sizeof(in_frame));
-			// 	in_frame.client_id = cli_id[i];
-			// 	in_frame.server_id = srv_id;
-			// 	in_frame.time = ts;
-			// 	in_frame.paddle_x = (X_AXIS_MAX-PADDLE_SIZE)/2; //half-half of paddle
-			// 	in_frame.ball_x = X_AXIS_MAX/2; //half
-			// 	in_frame.ball_y = Y_AXIS_MAX/2; //half
-			// 	bzero(&databuf, sizeof(databuf));
-			// 	memcpy(databuf, &in_frame, sizeof(in_frame));
-			// 	socklen_t cli_addrlen = sizeof(cli_addr[i]);
-			// 	if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
-			// 		perror("Sending datagram message error");
-			// 	}
-			// }
 			int paddle[2] = {(X_AXIS_MAX-PADDLE_SIZE)/2, (X_AXIS_MAX-PADDLE_SIZE)/2};
 			double ball_x = X_AXIS_MAX/2;
 			double ball_y = Y_AXIS_MAX/2;
@@ -305,7 +286,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 				struct sockaddr src_addr;
 				socklen_t src_addrlen = sizeof(src_addr);
 				bzero(&src_addr, sizeof(src_addr));
-				if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, &src_addrlen) < 0)
+				if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, &src_addrlen) < 32)
 				{
 					syslog(LOG_ERR, "Reading datagram message error\n");
 					close(sd);
@@ -363,7 +344,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 						return_frame.time = ts;
 						bzero(&databuf, sizeof(databuf));
 						memcpy(databuf, &return_frame, sizeof(return_frame));
-						if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, src_addrlen) < 0){
+						if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&src_addr, src_addrlen) < 32){
 							syslog(LOG_ERR, "Sending datagram message error\n");
 						}
 					}
@@ -385,7 +366,7 @@ int daemon_init(const char *pname, int facility, uid_t uid, int socket)
 			bzero(&databuf, sizeof(databuf));
 			memcpy(databuf, &e_frame, sizeof(e_frame));
 			socklen_t cli_addrlen = sizeof(cli_addr[i]);
-			if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 0){
+			if(sendto(sd, databuf, datalen, 0, (struct sockaddr *)&cli_addr[i], cli_addrlen) < 32){
 				syslog(LOG_ERR, "Sending final message error\n");
 			}
 			else

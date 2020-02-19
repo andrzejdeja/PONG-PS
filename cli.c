@@ -15,7 +15,6 @@
 #include 	<netdb.h>
 #include 	<resolv.h>
 #include 	<unistd.h>
-#include <netinet/sctp.h>
 #include <linux/input.h>
 
 #define SERV_PORT 25564
@@ -196,7 +195,7 @@ int main (int argc, char *argv[ ])
   memcpy(databuf, &init_frame, sizeof(init_frame));
   memcpy(databuf + sizeof(init_frame), argv[2], strlen(argv[2]));
 
-  if(sendto(sd, databuf, sizeof(databuf), 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0){ //Looking for server
+  if(sendto(sd, databuf, sizeof(databuf), 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 32){ //Looking for server
     perror("Sending datagram message error");
   } else
     printf("Looking for server...OK\n");
@@ -207,7 +206,7 @@ int main (int argc, char *argv[ ])
 		uint16_t srv_id = 0;
     uint16_t cli_id = 0; 
     char enemy_name[18];
-  if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0)
+  if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 32)
     {
       perror("Reading datagram message error\n");
       close(sd);
@@ -222,7 +221,7 @@ int main (int argc, char *argv[ ])
       srv_id = init_frame->server_id;
     }
   while(1){
-    if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
+    if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 32) {
 				perror("Reading datagram message error\n");
 				close(sd);
 				exit(1);
@@ -248,7 +247,7 @@ int main (int argc, char *argv[ ])
       }
       printf("+------------------------------------------------------------------------+\n");
     //first frame
-      if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
+      if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 32) {
 				perror("Reading datagram message error\n");
 				close(sd);
 				exit(1);
@@ -272,7 +271,7 @@ int main (int argc, char *argv[ ])
       //int flags = fcntl(fid, F_GETFL, 0);
       //fcntl(fid, F_SETFL, flags | O_NONBLOCK);
       while(1){ //countdown loop
-        if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
+        if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 32) {
           perror("Reading datagram message error\n");
           close(sd);
           exit(1);
@@ -347,10 +346,10 @@ int main (int argc, char *argv[ ])
         o_frame.time = ts;
         o_frame.paddle_x = paddle_own;
         memcpy(databuf, &o_frame, sizeof(o_frame));
-        if(sendto(sd, databuf, sizeof(databuf), 0, (struct sockaddr*)&srv_addr, srv_addrlen) < 0){ //sharing paddle position
+        if(sendto(sd, databuf, sizeof(databuf), 0, (struct sockaddr*)&srv_addr, srv_addrlen) < 32){ //sharing paddle position
           perror("Sending datagram message error");
         }
-        if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 0) {
+        if(recvfrom(sd, databuf, datalen, 0, (struct sockaddr *)&srv_addr, &srv_addrlen) < 32) {
           perror("Reading datagram message error\n");
         } else {
           struct input_frame * i_frame;
